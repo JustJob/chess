@@ -3,6 +3,8 @@ package main
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMoveFromStringPos(t *testing.T) {
@@ -35,6 +37,24 @@ func TestMoveFromStringPos(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyMove(t *testing.T) {
+	b := NewStandardBoard()
+	m, err := MoveFromStringPos("b2 b4")
+	require.NoError(t, err)
+
+	expectedStart := convertPosToBitmap(9)
+	expectedEnd := convertPosToBitmap(25)
+
+	require.NotEqual(t, uint64(0), b.pieces[WhiteIndex][PawnIndex]&expectedStart)
+	require.Equal(t, uint64(0), b.pieces[WhiteIndex][PawnIndex]&expectedEnd)
+
+	err = b.applyMove(m)
+	require.NoError(t, err)
+
+	require.Equal(t, uint64(0), b.pieces[WhiteIndex][PawnIndex]&expectedStart)
+	require.NotEqual(t, uint64(0), b.pieces[WhiteIndex][PawnIndex]&expectedEnd)
 }
 
 func Test_addPiece(t *testing.T) {

@@ -64,41 +64,47 @@ type ColorIndex int
 type PieceIndex int
 
 const (
-	KingIndex   PieceIndex = 0
-	QueenIndex  PieceIndex = 1
-	BishopIndex PieceIndex = 2
-	KnightIndex PieceIndex = 3
-	RookIndex   PieceIndex = 4
-	PawnIndex   PieceIndex = 5
+	KingIndex         PieceIndex = 0
+	QueenIndex        PieceIndex = 1
+	BishopIndex       PieceIndex = 2
+	KnightIndex       PieceIndex = 3
+	RookIndex         PieceIndex = 4
+	PawnIndex         PieceIndex = 5
+	InvalidPieceIndex PieceIndex = 6
 
-	WhiteIndex ColorIndex = 0
-	BlackIndex ColorIndex = 1
+	WhiteIndex        ColorIndex = 0
+	BlackIndex        ColorIndex = 1
+	InvalidColorIndex ColorIndex = 2
 )
 
 type Board struct {
 	pieces [2][6]uint64
 }
 
+func convertPosToBitmap(pos uint8) uint64 {
+	return 1 << pos
+}
+
 func NewStandardBoard() *Board {
 	b := &Board{}
-	b.pieces[WhiteIndex][KingIndex] = 1 << 4
-	b.pieces[BlackIndex][KingIndex] = 1 << 60
-	b.pieces[WhiteIndex][QueenIndex] = 1 << 3
-	b.pieces[BlackIndex][QueenIndex] = 1 << 59
-	b.pieces[WhiteIndex][BishopIndex] = 1<<2 | 1<<5
-	b.pieces[BlackIndex][BishopIndex] = 1<<58 | 1<<61
-	b.pieces[WhiteIndex][KnightIndex] = 1<<1 | 1<<6
-	b.pieces[BlackIndex][KnightIndex] = 1<<57 | 1<<62
-	b.pieces[WhiteIndex][RookIndex] = 1 | 1<<7
-	b.pieces[BlackIndex][RookIndex] = 1<<56 | 1<<63
+	b.pieces[WhiteIndex][KingIndex] = convertPosToBitmap(4)
+	b.pieces[BlackIndex][KingIndex] = convertPosToBitmap(60)
+	b.pieces[WhiteIndex][QueenIndex] = convertPosToBitmap(3)
+	b.pieces[BlackIndex][QueenIndex] = convertPosToBitmap(59)
+	b.pieces[WhiteIndex][BishopIndex] = convertPosToBitmap(2) | convertPosToBitmap(5)
+	b.pieces[BlackIndex][BishopIndex] = convertPosToBitmap(58) | convertPosToBitmap(61)
+	b.pieces[WhiteIndex][KnightIndex] = convertPosToBitmap(1) | convertPosToBitmap(6)
+	b.pieces[BlackIndex][KnightIndex] = convertPosToBitmap(57) | convertPosToBitmap(62)
+	b.pieces[WhiteIndex][RookIndex] = 1 | convertPosToBitmap(7)
+	b.pieces[BlackIndex][RookIndex] = convertPosToBitmap(56) | convertPosToBitmap(63)
 
 	b.pieces[WhiteIndex][PawnIndex] = 0
-	for i := 8; i < 16; i++ {
-		b.pieces[WhiteIndex][PawnIndex] |= 1 << i
+	for i := uint8(8); i < 16; i++ {
+		b.pieces[WhiteIndex][PawnIndex] |= convertPosToBitmap(i)
 	}
 	b.pieces[BlackIndex][PawnIndex] = 0
-	for i := 48; i < 56; i++ {
-		b.pieces[BlackIndex][PawnIndex] |= 1 << i
+	for i := uint8(48); i < 56; i++ {
+		b.pieces[BlackIndex][PawnIndex] |= convertPosToBitmap(i)
 	}
 	return b
 }
@@ -119,6 +125,29 @@ func (b *Board) GetBlackPieces() uint64 {
 		b.pieces[BlackIndex][KnightIndex] |
 		b.pieces[BlackIndex][RookIndex] |
 		b.pieces[BlackIndex][PawnIndex]
+}
+
+func (b *Board) GetColorAndPieceForPos(posIndex uint8) (ColorIndex, PieceIndex) {
+	pos := convertPosToBitmap(posIndex)
+	whitePieces := b.GetWhitePieces()
+	color := InvalidColorIndex
+	if whitePieces&pos != 0 {
+		color = WhiteIndex
+	}
+	blackPieces := b.GetBlackPieces()
+	if blackPieces&pos != 0 {
+		color = BlackIndex
+	}
+
+	if color == InvalidColorIndex {
+		return InvalidColorIndex, InvalidPieceIndex
+	}
+	for i := KingIndex; i < InvalidPieceIndex; i++ {
+		if pos&b.pieces[color][i] != 0 {
+			return color, i
+		}
+	}
+	return InvalidColorIndex, InvalidPieceIndex
 }
 
 func (b *Board) GetAllPieces() uint64 {
@@ -178,6 +207,20 @@ func (b *Board) IsValidMove(m *Move, colorIndex ColorIndex) bool {
 }
 
 func (b *Board) applyMove(m *Move) error {
+	color, piece := b.GetColorAndPieceForPos(m.startIndex)
+	if color == InvalidColorIndex || piece == InvalidPieceIndex {
+		return fmt.Errorf("no piece at pos %d", m.startIndex)
+	}
+
+	endSpace := convertPosToBitmap(m.endIndex)
+	for i := WhiteIndex; i < InvalidColorIndex; i++ {
+		for j := KingIndex; j < InvalidPieceIndex; j++ {
+			b.pieces[i][j] = b.pieces[i][j] &^ endSpace
+		}
+	}
+	startSpace := convertPosToBitmap(m.startIndex)
+	b.pieces[color][piece] = b.pieces[color][piece] &^ startSpace
+	b.pieces[color][piece] = b.pieces[color][piece] | endSpace
 	return nil
 }
 
@@ -200,7 +243,7 @@ func NewStandardChessGame() *ChessGame {
 }
 
 func (g *ChessGame) PlayGame(ctx context.Context) {
-
+	fmt.Printf("board:\n%s\n", g.board)
 	var err error
 	for !g.IsFinished() {
 		if g.turnIndex == BlackIndex {
